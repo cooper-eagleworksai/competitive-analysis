@@ -1,0 +1,24 @@
+@keyframes ew-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ew-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #c0cfe0 !important;
+}
+
+::selection {
+  background: #ffffff;
+  color: #0A1A2F;
+}

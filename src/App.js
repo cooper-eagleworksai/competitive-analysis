@@ -1,5 +1,5 @@
 
 
-import CompetitiveIntelTool from './intel-tool-v3';
-function App() { return <CompetitiveIntelTool />; }
+import EagleWorksIntel from './EagleWorksIntel';
+function App() { return <EagleWorksIntel />; }
 export default App;
