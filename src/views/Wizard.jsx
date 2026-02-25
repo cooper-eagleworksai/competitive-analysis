@@ -1,7 +1,8 @@
 import C from "../constants/colors";
 import Btn from "../components/Btn";
+import { SCHEDULE_URL } from "../constants/data";
 
-export default function Wizard({ pg, form, onChange, onBack, onScan, inp }) {
+export default function Wizard({ pg, form, onChange, onBack, onScan, rateLimited, inp }) {
   const ok = form.name && form.location;
   return (
     <div style={{
@@ -44,9 +45,26 @@ export default function Wizard({ pg, form, onChange, onBack, onScan, inp }) {
           ))}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 40 }}>
+        {rateLimited && (
+          <div style={{
+            marginTop: 28, borderRadius: C.r, padding: "20px 22px", textAlign: "center",
+            background: "rgba(232, 163, 56, 0.08)", border: `1px solid rgba(232, 163, 56, 0.25)`,
+          }}>
+            <p style={{ color: C.text, fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>
+              You've used your free scan for today
+            </p>
+            <p style={{ color: C.textSec, fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
+              Come back tomorrow for another free snapshot, or schedule a call to get the full competitive report now.
+            </p>
+            <Btn variant="amber" onClick={() => window.open(SCHEDULE_URL, "_blank")}>
+              Schedule a Call →
+            </Btn>
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: rateLimited ? 20 : 40 }}>
           <Btn variant="secondary" onClick={onBack}>← Back</Btn>
-          <Btn onClick={onScan} disabled={!ok}>Scan My Market →</Btn>
+          <Btn onClick={onScan} disabled={!ok || rateLimited}>Scan My Market →</Btn>
         </div>
       </div>
     </div>

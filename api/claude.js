@@ -4,26 +4,43 @@
  * Body: { system: string, user: string, useSearch?: boolean }
  *
  * Set ANTHROPIC_API_KEY in your Vercel project environment variables.
+ * Locally, vercel dev doesn't always inject .env.local into serverless
+ * functions, so we load it explicitly as a fallback.
  */
+try { process.loadEnvFile(".env.local"); } catch {}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { system, user, useSearch } = req.body ?? {};
+  const { system, user, useSearch, location } = req.body ?? {};
   if (!system || !user) {
     return res.status(400).json({ error: "Missing system or user prompt" });
   }
+  if (typeof system !== "string" || system.length > 2000) {
+    return res.status(400).json({ error: "Invalid request." });
+  }
+  if (typeof user !== "string" || user.length > 5000) {
+    return res.status(400).json({ error: "Invalid request." });
+  }
+  if (location && (typeof location !== "string" || location.length > 200)) {
+    return res.status(400).json({ error: "Invalid request." });
+  }
 
   const body = {
-    model: "claude-4.6-sonnet",
-    max_tokens: 1200,
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
     system,
     messages: [{ role: "user", content: user }],
   };
 
   if (useSearch) {
-    body.tools = [{ type: "web_search_20250305", name: "web_search" }];
+    const searchTool = { type: "web_search_20250305", name: "web_search" };
+    if (location) {
+      searchTool.user_location = { type: "approximate", region: location };
+    }
+    body.tools = [searchTool];
   }
 
   try {
@@ -41,7 +58,13 @@ export default async function handler(req, res) {
 
     if (!r.ok) {
       console.error("[claude proxy] Anthropic error:", data);
-      return res.status(r.status).json({ error: data });
+      const status = r.status;
+      const msg =
+        status === 401 ? "API configuration error. Please contact support." :
+        status === 429 ? "Too many requests. Please wait a moment and try again." :
+        status === 529 ? "The analysis service is temporarily overloaded. Please try again shortly." :
+        "Analysis failed. Please try again.";
+      return res.status(status).json({ error: msg });
     }
 
     // Extract all text blocks from the response
@@ -53,6 +76,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ text });
   } catch (err) {
     console.error("[claude proxy] Fetch error:", err);
-    return res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: "An unexpected error occurred. Please try again." });
   }
 }

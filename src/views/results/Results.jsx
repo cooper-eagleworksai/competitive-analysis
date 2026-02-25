@@ -15,7 +15,7 @@ const TABS = [
   { id: "services",     label: "What We Build" },
 ];
 
-export default function Results({ pg, results, form, tab, setTab, email, setEmail, submitted, onSubmitEmail, inp }) {
+export default function Results({ pg, results, usedFallback, form, tab, setTab, email, setEmail, submitted, submitting, submitErr, onEmailChange, onSubmitEmail, inp }) {
   const a     = results.analysis;
   const comps = results.competitors;
 
@@ -69,6 +69,18 @@ export default function Results({ pg, results, form, tab, setTab, email, setEmai
 
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "28px 24px" }}>
 
+        {usedFallback && (
+          <div style={{
+            background: "rgba(232, 163, 56, 0.08)", border: `1px solid rgba(232, 163, 56, 0.25)`,
+            borderRadius: C.r, padding: "14px 18px", marginBottom: 20,
+          }}>
+            <p style={{ color: C.amber, fontSize: 13, margin: 0, lineHeight: 1.5 }}>
+              Full analysis wasn't available — showing a preliminary assessment based on available data.
+              Schedule a call for the complete competitive report.
+            </p>
+          </div>
+        )}
+
         {tab === "overview"    && <OverviewTab    a={a} comps={comps} form={form} pg={pg} setTab={setTab} />}
         {tab === "competitors" && <CompetitorsTab comps={comps} form={form} pg={pg} />}
         {tab === "insights"    && <InsightsTab    a={a} pg={pg} setTab={setTab} />}
@@ -91,16 +103,19 @@ export default function Results({ pg, results, form, tab, setTab, email, setEmai
                   type="email"
                   placeholder="your@email.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => onEmailChange(e.target.value)}
                 />
                 <Btn
                   onClick={onSubmitEmail}
-                  disabled={!email.includes("@")}
+                  disabled={!email.includes("@") || submitting}
                   style={{ flex: "0 0 auto", padding: "14px 24px" }}
                 >
-                  Send Report
+                  {submitting ? "Sending…" : "Send Report"}
                 </Btn>
               </div>
+              {submitErr && (
+                <p style={{ color: C.red, fontSize: 13, marginBottom: 16 }}>{submitErr}</p>
+              )}
               <div style={{ color: C.textMut, fontSize: 13, marginBottom: 20 }}>— or —</div>
               <Btn variant="amber" onClick={() => window.open(SCHEDULE_URL, "_blank")}>
                 Schedule a Call

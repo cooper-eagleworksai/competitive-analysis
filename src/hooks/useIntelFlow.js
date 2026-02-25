@@ -1,6 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { callClaude, parseJSON } from "../api/claude";
 import { SCAN_STEPS, ANALYSIS_STEPS } from "../constants/data";
+
+const RATE_LIMIT_KEY = "ew_last_flow";
+const ONE_DAY_MS     = 24 * 60 * 60 * 1000;
+const RATE_LIMIT_OFF = process.env.REACT_APP_DISABLE_RATE_LIMIT === "true";
+
+function isRateLimited() {
+  if (RATE_LIMIT_OFF) return false;
+  try {
+    const last = parseInt(localStorage.getItem(RATE_LIMIT_KEY), 10);
+    return last && (Date.now() - last) < ONE_DAY_MS;
+  } catch { return false; }
+}
+
+function stampFlowUsed() {
+  if (RATE_LIMIT_OFF) return;
+  try { localStorage.setItem(RATE_LIMIT_KEY, Date.now().toString()); } catch {}
+}
 
 /**
  * Central state + action hook for the EagleWorks Intel flow.
@@ -11,6 +28,7 @@ export default function useIntelFlow() {
   const [view,          setView         ] = useState("landing");
   const [fade,          setFade         ] = useState(false);
   const [tab,           setTab          ] = useState("overview");
+  const [rateLimited,   setRateLimited  ] = useState(false);
 
   // ── Form ──
   const [form, setForm] = useState({ name: "", website: "", location: "" });
@@ -21,14 +39,22 @@ export default function useIntelFlow() {
   const [selected,      setSelected     ] = useState([]);
   const [extra,         setExtra        ] = useState("");
   const [apiErr,        setApiErr       ] = useState(false);
+  const [apiErrMsg,     setApiErrMsg    ] = useState("");
 
   // ── Analysis ──
   const [analysisStep,  setAnalysisStep ] = useState(0);
   const [results,       setResults      ] = useState(null);
+  const [usedFallback,  setUsedFallback ] = useState(false);
+
+  // ── Interval refs (for cleanup on unmount) ──
+  const scanIvRef     = useRef(null);
+  const analysisIvRef = useRef(null);
 
   // ── CTA / email ──
   const [email,         setEmail        ] = useState("");
   const [submitted,     setSubmitted    ] = useState(false);
+  const [submitting,    setSubmitting   ] = useState(false);
+  const [submitErr,     setSubmitErr    ] = useState("");
 
   // Fade-in on view change
   useEffect(() => {
@@ -36,6 +62,14 @@ export default function useIntelFlow() {
     const t = setTimeout(() => setFade(true), 40);
     return () => clearTimeout(t);
   }, [view]);
+
+  // Clean up intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (scanIvRef.current) clearInterval(scanIvRef.current);
+      if (analysisIvRef.current) clearInterval(analysisIvRef.current);
+    };
+  }, []);
 
   // ── Form helpers ──
   const onChange = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -60,21 +94,36 @@ export default function useIntelFlow() {
 
   // ── DISCOVER ──
   const runDiscover = useCallback(async () => {
+    if (isRateLimited()) {
+      setRateLimited(true);
+      return;
+    }
+    setRateLimited(false);
     setView("scanning");
     setScanStep(0);
     setApiErr(false);
+    setApiErrMsg("");
 
     const iv = setInterval(
       () => setScanStep((p) => Math.min(p + 1, SCAN_STEPS.length - 1)),
       3000
     );
+    scanIvRef.current = iv;
 
     const sys = `You are a competitive intelligence researcher. Find real, currently operating competitors. Return ONLY a JSON array, no markdown or backticks. Each object: {"name":"string","website":"string or null","description":"2 sentences","location":"string"}. Return 6-10 competitors. Verify they are real businesses.`;
     const usr = `Find 6-10 real competitors for: ${form.name} (${form.website || "no website"}), ${form.location}. Search the web and return real businesses with actual website URLs.`;
 
-    const raw = await callClaude(sys, usr, 60000);
+    const raw = await callClaude(sys, usr, 60000, true, form.location);
     clearInterval(iv);
+    scanIvRef.current = null;
     setScanStep(SCAN_STEPS.length - 1);
+
+    if (raw === "__TIMEOUT__") {
+      setApiErr(true);
+      setApiErrMsg("The search took longer than expected. You can retry or add competitors manually.");
+      setTimeout(() => setView("confirm"), 500);
+      return;
+    }
 
     const parsed = parseJSON(raw);
     if (parsed && Array.isArray(parsed) && parsed.length > 0) {
@@ -84,6 +133,9 @@ export default function useIntelFlow() {
       setTimeout(() => setView("confirm"), 500);
     } else {
       setApiErr(true);
+      setApiErrMsg(raw === null
+        ? "Something went wrong reaching our analysis service. You can retry or add competitors manually."
+        : "We couldn't parse competitor data. You can retry or add competitors manually.");
       setTimeout(() => setView("confirm"), 500);
     }
   }, [form]);
@@ -92,11 +144,13 @@ export default function useIntelFlow() {
   const runAnalysis = useCallback(async () => {
     setView("analyzing");
     setAnalysisStep(0);
+    setUsedFallback(false);
 
     const iv = setInterval(
       () => setAnalysisStep((p) => Math.min(p + 1, ANALYSIS_STEPS.length - 1)),
       2200
     );
+    analysisIvRef.current = iv;
 
     const confirmed    = competitors.filter((c) => selected.includes(c.id));
 
@@ -117,8 +171,11 @@ export default function useIntelFlow() {
       if (!forceCompleted) {
         forceCompleted = true;
         clearInterval(iv);
+        analysisIvRef.current = null;
         setAnalysisStep(ANALYSIS_STEPS.length - 1);
+        setUsedFallback(true);
         setResults({ analysis: buildFallback(), competitors: confirmed });
+        stampFlowUsed();
         setTimeout(() => { setView("results"); setTab("overview"); }, 600);
       }
     }, 75000);
@@ -158,6 +215,7 @@ Based on this information, provide a strategic competitive assessment. Focus on 
     forceCompleted = true;
     clearTimeout(safetyTimer);
     clearInterval(iv);
+    analysisIvRef.current = null;
     setAnalysisStep(ANALYSIS_STEPS.length - 1);
 
     let data = parseJSON(raw);
@@ -176,17 +234,47 @@ Based on this information, provide a strategic competitive assessment. Focus on 
         data.insights = buildFallbackInsights(confirmed, form);
 
       setResults({ analysis: data, competitors: confirmed });
+      stampFlowUsed();
       setTimeout(() => { setView("results"); setTab("overview"); }, 600);
     } else {
+      setUsedFallback(true);
       setResults({ analysis: buildFallback(), competitors: confirmed });
+      stampFlowUsed();
       setTimeout(() => { setView("results"); setTab("overview"); }, 600);
     }
   }, [competitors, selected, form]); // eslint-disable-line
 
   // ── Email submit ──
-  const onSubmitEmail = () => {
-    if (email.includes("@")) setSubmitted(true);
-  };
+  const onSubmitEmail = useCallback(async () => {
+    if (!email.includes("@") || submitting) return;
+    setSubmitting(true);
+    setSubmitErr("");
+
+    try {
+      const compNames = (results?.competitors || []).map((c) => c.name);
+      const res = await fetch("/api/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          name: form.name,
+          website: form.website || "",
+          location: form.location,
+          competitors: compNames,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSubmitted(true);
+      } else {
+        setSubmitErr(data.error || "Something went wrong. Please try again.");
+      }
+    } catch {
+      setSubmitErr("Could not reach the server. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [email, form, results, submitting]);
 
   // ── Animation style ──
   const pg = {
@@ -197,15 +285,15 @@ Based on this information, provide a strategic competitive assessment. Focus on 
 
   return {
     // state
-    view, setView, pg,
+    view, setView, pg, rateLimited,
     form, onChange,
     scanStep,
-    competitors, selected, extra, setExtra, apiErr,
+    competitors, selected, extra, setExtra, apiErr, apiErrMsg,
     analysisStep,
-    results,
+    results, usedFallback,
     tab, setTab,
     email, setEmail,
-    submitted,
+    submitted, submitting, submitErr, setSubmitErr,
     // actions
     runDiscover,
     runAnalysis,

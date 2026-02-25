@@ -7,7 +7,8 @@ export async function callClaude(
   sysPrompt,
   userPrompt,
   timeoutMs = 60000,
-  useSearch = true
+  useSearch = true,
+  location = null
 ) {
   const timeoutPromise = new Promise((resolve) => {
     setTimeout(() => resolve("__TIMEOUT__"), timeoutMs);
@@ -18,7 +19,7 @@ export async function callClaude(
       const res = await fetch("/api/claude", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: sysPrompt, user: userPrompt, useSearch }),
+        body: JSON.stringify({ system: sysPrompt, user: userPrompt, useSearch, location }),
       });
       const data = await res.json();
       if (data.error) {

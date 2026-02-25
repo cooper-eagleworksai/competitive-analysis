@@ -3,8 +3,8 @@ import Btn from "../components/Btn";
 import Lbl from "../components/Lbl";
 
 export default function Confirm({
-  pg, competitors, selected, extra, apiErr,
-  onToggle, onExtraChange, onAddExtra, onBack, onAnalyze, inp,
+  pg, competitors, selected, extra, apiErr, apiErrMsg,
+  onToggle, onExtraChange, onAddExtra, onBack, onAnalyze, onRetry, inp,
 }) {
   return (
     <div style={{
@@ -22,9 +22,24 @@ export default function Confirm({
         <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 6 }}>
           {apiErr ? "Add your competitors" : `We found ${competitors.length} competitors`}
         </h2>
-        <p style={{ color: C.textSec, marginBottom: 32, fontSize: 15 }}>
+        <p style={{ color: C.textSec, marginBottom: apiErr ? 16 : 32, fontSize: 15 }}>
           {apiErr ? "Add the competitors you'd like analyzed." : "Select which to include. Add any we missed."}
         </p>
+
+        {apiErr && (
+          <div style={{
+            background: "rgba(232, 84, 84, 0.08)", border: `1px solid rgba(232, 84, 84, 0.25)`,
+            borderRadius: C.r, padding: "14px 18px", marginBottom: 24,
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          }}>
+            <p style={{ color: C.textSec, fontSize: 13, margin: 0, lineHeight: 1.5 }}>
+              {apiErrMsg || "We couldn't find competitors automatically."}
+            </p>
+            <Btn variant="secondary" onClick={onRetry} style={{ flexShrink: 0, fontSize: 13, padding: "8px 16px" }}>
+              Retry
+            </Btn>
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
           {competitors.map((c) => {

@@ -3,7 +3,11 @@
   "outputDirectory": "build",
   "devCommand": "npm start",
   "installCommand": "npm install",
+  "functions": {
+    "api/claude.js": { "maxDuration": 60 },
+    "api/lead.js": { "maxDuration": 10 }
+  },
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|static).*)", "destination": "/index.html" }
   ]
 }

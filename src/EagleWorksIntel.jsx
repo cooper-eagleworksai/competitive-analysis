@@ -56,6 +56,7 @@ export default function EagleWorksIntel() {
           onChange={flow.onChange}
           onBack={() => flow.setView("landing")}
           onScan={flow.runDiscover}
+          rateLimited={flow.rateLimited}
           inp={inp}
         />
       </Shell>
@@ -77,11 +78,13 @@ export default function EagleWorksIntel() {
           selected={flow.selected}
           extra={flow.extra}
           apiErr={flow.apiErr}
+          apiErrMsg={flow.apiErrMsg}
           onToggle={flow.toggle}
           onExtraChange={flow.setExtra}
           onAddExtra={flow.addExtra}
           onBack={() => flow.setView("wizard")}
           onAnalyze={flow.runAnalysis}
+          onRetry={flow.runDiscover}
           inp={inp}
         />
       </Shell>
@@ -104,12 +107,15 @@ export default function EagleWorksIntel() {
         <Results
           pg={flow.pg}
           results={flow.results}
+          usedFallback={flow.usedFallback}
           form={flow.form}
           tab={flow.tab}
           setTab={flow.setTab}
           email={flow.email}
-          setEmail={flow.setEmail}
           submitted={flow.submitted}
+          submitting={flow.submitting}
+          submitErr={flow.submitErr}
+          onEmailChange={(v) => { flow.setEmail(v); flow.setSubmitErr(""); }}
           onSubmitEmail={flow.onSubmitEmail}
           inp={inp}
         />
