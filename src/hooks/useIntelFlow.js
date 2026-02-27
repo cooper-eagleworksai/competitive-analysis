@@ -183,35 +183,42 @@ export default function useIntelFlow() {
       .map((c) => `- ${c.name}${c.website ? ` (${c.website})` : ""}: ${c.description || "no details"}`)
       .join("\n");
 
-    const sys = `You are a competitive intelligence analyst. Based on the competitor information provided, give a strategic assessment. Return ONLY valid JSON — no markdown, no backticks, no explanation:
-{
-  "positioning": "3 sentence assessment of the company's competitive position",
-  "insights": [
-    {"type":"opportunity","title":"short title","text":"2-3 sentence specific insight using competitor names"},
-    {"type":"opportunity","title":"short title","text":"2-3 sentence insight"},
-    {"type":"threat","title":"short title","text":"2-3 sentence insight using competitor names"},
-    {"type":"threat","title":"short title","text":"2-3 sentence insight"},
-    {"type":"strength","title":"short title","text":"2-3 sentence insight"}
-  ],
-  "ratings_summary": "2 sentences about the reputation landscape",
-  "top_competitor": "2 sentences naming the top threat and why",
-  "market_overview": "2 sentences about market dynamics"
-}`;
+      const sys = `You are a calm, accurate competitive intelligence analyst working from limited public data — website content, search results, and online reviews. Your job is to give a grounded, signal-based snapshot, not a definitive market study.
 
-    const usr = `Analyze this competitive landscape:
+Return ONLY valid JSON — no markdown, no backticks, no explanation:
+{
+  "positioning": "2-3 sentences. How the company appears to fit into this competitive landscape based on available signals. Be neutral and appropriately hedged.",
+  "insights": [
+    {"type":"opportunity|threat|strength","title":"Short title","text":"2 sentences max. Name a specific competitor, describe what the public data suggests, recommend one concrete action."}
+  ],
+  "ratings_summary": "2 sentences about the visible reputation landscape based on reviews and ratings found. Acknowledge that review counts may be low.",
+  "top_competitor": "2 sentences. Name the most significant competitor based on visible signals and explain what makes them worth watching — not a definitive verdict.",
+  "market_overview": "2-3 sentences. Describe apparent market dynamics based on this competitor set and publicly available information."
+}
+
+RULES:
+- Exactly 5 insights, 2 sentences each
+- Choose types based on the data — do not default to threats
+- Every insight names a specific competitor
+- Assume the subject company is competent and established
+- Use hedged language throughout: "appears to," "based on available data," "publicly visible," "signals suggest" — never state conclusions as established fact
+- A competitor with a few strong reviews is not "highly rated" — say "shows strong early reviews" or "holds a 4.8 rating across X reviews"
+- Avoid: "dominates," "monopoly," "must," "risks being overlooked," "dangerous," "strong competitor," "high customer satisfaction" as absolute claims
+- If data is thin, still provide your best analysis based on available signals — just use language like "based on limited visible data" or "from what's publicly available." Never refuse to analyze or tell the user conclusions would be premature. Always give them something useful.`;
+
+    const usr = `Analyze this competitive landscape for ${form.name}:
 
 COMPANY: ${form.name} (${form.website || "no website"})
-
 LOCATION: ${form.location}
 
-COMPETITORS FOUND:
+COMPETITORS:
 ${compDetails}
 
-Based on this information, provide a strategic competitive assessment. Focus on positioning, opportunities, threats, and actionable insights. Reference specific competitor names.`;
+Based on these competitors, provide a strategic competitive assessment. Name specific competitors in every insight. What should ${form.name} actually do differently based on who they're up against?`;
 
     const raw = await callClaude(sys, usr, 60000, false);
 
-    if (forceCompleted) return;
+    if (forceCompleted) { console.error("[ANALYSIS] Safety timer already fired — response came back too late"); return; }
     forceCompleted = true;
     clearTimeout(safetyTimer);
     clearInterval(iv);
@@ -221,22 +228,16 @@ Based on this information, provide a strategic competitive assessment. Focus on 
     let data = parseJSON(raw);
 
     if (data) {
-      const top = confirmed[0]?.name || "your primary competitor";
-      if (!data.positioning || data.positioning.length < 20)
-        data.positioning = `${form.name} operates in a competitive market in ${form.location} alongside ${confirmed.length} identified competitors. Your positioning relative to ${top} and others reveals both strategic opportunities and areas requiring attention. The full report includes detailed positioning analysis across pricing, services, and digital presence.`;
-      if (!data.top_competitor || data.top_competitor.length < 20)
-        data.top_competitor = `${top} appears to be the most established player in your ${form.location} market based on web presence and positioning. A detailed threat assessment with scoring across multiple dimensions is available in the full report.`;
-      if (!data.ratings_summary || data.ratings_summary.length < 20)
-        data.ratings_summary = `The online reputation landscape across ${form.location} businesses varies significantly. Some competitors have invested heavily in Google and Yelp review generation while others have minimal online presence, creating a clear advantage for businesses that prioritize reputation management.`;
-      if (!data.market_overview || data.market_overview.length < 20)
-        data.market_overview = `The local market in ${form.location} shows active competition with room for differentiation. Both established players and newer entrants are vying for market share through different strategies.`;
-      if (!data.insights || !Array.isArray(data.insights) || data.insights.length === 0)
+      if (!data.insights || !Array.isArray(data.insights) || data.insights.length === 0) {
+        console.warn("[ANALYSIS] Insights array missing/empty in Claude response, using fallback insights");
         data.insights = buildFallbackInsights(confirmed, form);
-
+      }
+      console.log("[ANALYSIS] USING CLAUDE RESPONSE — positioning:", data.positioning?.slice(0, 100));
       setResults({ analysis: data, competitors: confirmed });
       stampFlowUsed();
       setTimeout(() => { setView("results"); setTab("overview"); }, 600);
     } else {
+      console.error("[ANALYSIS] USING FULL FALLBACK — parseJSON returned null (see errors above for why)");
       setUsedFallback(true);
       setResults({ analysis: buildFallback(), competitors: confirmed });
       stampFlowUsed();
@@ -306,12 +307,13 @@ Based on this information, provide a strategic competitive assessment. Focus on 
 // ── Helpers ──
 function buildFallbackInsights(confirmed, form) {
   const top = confirmed[0]?.name || "your primary competitor";
+  const second = confirmed[1]?.name || "other local competitors";
   return [
-    { type: "opportunity", title: "Digital Presence Gap",  text: `Several competitors in ${form.location} have underdeveloped online presence. A strategic investment in SEO, review generation, and content marketing could capture significant discovery-phase traffic.` },
-    { type: "opportunity", title: "Service Differentiation", text: `Our scan identified potential service gaps among your ${confirmed.length} competitors. Businesses that fill unaddressed needs early can establish category ownership before competitors react.` },
-    { type: "threat",      title: "Competitive Density",   text: `${top} and ${confirmed.length - 1} other businesses are competing for the same customers in ${form.location}. Monitoring their moves and differentiating clearly is critical.` },
-    { type: "threat",      title: "Review Momentum",       text: `Some competitors are building review velocity faster than others, which directly impacts local search rankings and customer trust.` },
-    { type: "strength",    title: "Intelligence Advantage", text: `By actively monitoring moves from ${top} and ${confirmed.length - 1} others, you can anticipate pricing changes, service expansions, and marketing pushes before they impact your pipeline. Most businesses in ${form.location} operate reactively — this gives you first-mover advantage on counter-positioning.` },
+    { type: "opportunity", title: `Gaps in ${form.location} Market`,  text: `With ${confirmed.length} competitors identified in ${form.location}, there are likely underserved niches. Review ${top}'s and ${second}'s service pages to identify offerings they don't provide, then target those gaps first.` },
+    { type: "opportunity", title: "Review Volume Opportunity", text: `Check the Google review counts for ${top} and ${second}. If any competitor has fewer than 50 reviews, an aggressive review-generation campaign could help you outrank them in local search within 3-6 months.` },
+    { type: "threat",      title: `${top}'s Market Position`,   text: `${top} appears to be the strongest competitor in ${form.location}. Visit their website and note their pricing, key services, and customer testimonials — then build a comparison page highlighting where ${form.name} offers more value.` },
+    { type: "threat",      title: "Pricing Pressure",       text: `With ${confirmed.length} businesses competing in ${form.location}, pricing pressure is likely. Research what ${second} charges for similar services and decide whether to compete on price or differentiate on quality and specialization.` },
+    { type: "strength",    title: "Competitive Awareness", text: `Most businesses in ${form.location} don't actively track their competitors. By monitoring ${top}, ${second}, and ${confirmed.length - 2 > 0 ? confirmed.length - 2 + " others" : "others"}, you can spot their pricing changes, new service launches, and marketing campaigns before they affect your pipeline.` },
   ];
 }
 

@@ -3,6 +3,7 @@ import Card from "../../components/Card";
 import Lbl from "../../components/Lbl";
 import Btn from "../../components/Btn";
 import Tag from "../../components/Tag";
+import TeaserText from "../../components/TeaserText";
 
 export default function OverviewTab({ a, comps, form, pg, setTab }) {
   return (
@@ -29,30 +30,24 @@ export default function OverviewTab({ a, comps, form, pg, setTab }) {
 
       <Card style={{ marginBottom: 16 }}>
         <Lbl>Market Positioning</Lbl>
-        <p style={{ fontSize: 15, lineHeight: 1.75, color: C.textSec }}>
-          {a.positioning || `${form.name} operates in a competitive market in ${form.location} alongside ${comps.length} identified competitors including ${comps[0]?.name || "several established players"}. Your positioning relative to these competitors reveals both strategic opportunities and areas requiring attention. The full report includes detailed positioning analysis across pricing, services, and digital presence.`}
-        </p>
+        <TeaserText text={a.positioning} style={{ fontSize: 15, lineHeight: 1.75, color: C.textSec }} />
       </Card>
 
       {a.market_overview && (
         <Card style={{ marginBottom: 16 }}>
           <Lbl>Market Overview</Lbl>
-          <p style={{ fontSize: 14, lineHeight: 1.7, color: C.textSec }}>{a.market_overview}</p>
+          <TeaserText text={a.market_overview} style={{ fontSize: 14, lineHeight: 1.7, color: C.textSec }} />
         </Card>
       )}
 
       <Card style={{ marginBottom: 16, background: C.redDim, border: `1px solid ${C.redBorder}` }}>
         <div style={{ marginBottom: 8 }}><Tag color="red">TOP THREAT</Tag></div>
-        <p style={{ fontSize: 14, lineHeight: 1.7, color: C.textSec }}>
-          {a.top_competitor || `${comps[0]?.name || "Your leading competitor"} appears to be the most established player in your ${form.location} market based on web presence and positioning. A detailed threat assessment with scoring across multiple dimensions is available in the full report.`}
-        </p>
+        <TeaserText text={a.top_competitor} style={{ fontSize: 14, lineHeight: 1.7, color: C.textSec }} />
       </Card>
 
       <Card>
         <Lbl>Online Reputation Landscape</Lbl>
-        <p style={{ fontSize: 14, lineHeight: 1.7, color: C.textSec }}>
-          {a.ratings_summary || `The online reputation landscape across ${form.location} businesses varies significantly. Some competitors have invested heavily in Google and Yelp review generation while others have minimal online presence, creating a clear advantage for businesses that prioritize reputation management.`}
-        </p>
+        <TeaserText text={a.ratings_summary} style={{ fontSize: 14, lineHeight: 1.7, color: C.textSec }} />
       </Card>
 
       {/* Pitch block */}
