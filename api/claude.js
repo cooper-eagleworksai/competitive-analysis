@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   if (!system || !user) {
     return res.status(400).json({ error: "Missing system or user prompt" });
   }
-  if (typeof system !== "string" || system.length > 2000) {
+  if (typeof system !== "string" || system.length > 4000) {
     return res.status(400).json({ error: "Invalid request." });
   }
   if (typeof user !== "string" || user.length > 5000) {
@@ -56,8 +56,11 @@ export default async function handler(req, res) {
 
     const data = await r.json();
 
+    console.log("[claude proxy] status:", r.status, "stop_reason:", data.stop_reason);
+    console.log("[claude proxy] content block types:", (data.content ?? []).map(b => b.type));
+
     if (!r.ok) {
-      console.error("[claude proxy] Anthropic error:", data);
+      console.error("[claude proxy] Anthropic error:", JSON.stringify(data, null, 2));
       const status = r.status;
       const msg =
         status === 401 ? "API configuration error. Please contact support." :
@@ -68,10 +71,12 @@ export default async function handler(req, res) {
     }
 
     // Extract all text blocks from the response
-    const text = (data.content ?? [])
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
+    const textBlocks = (data.content ?? []).filter((b) => b.type === "text");
+    console.log("[claude proxy] text blocks found:", textBlocks.length);
+    textBlocks.forEach((b, i) => console.log(`[claude proxy] text block ${i} (${b.text.length} chars):`, b.text.slice(0, 200)));
+
+    const text = textBlocks.map((b) => b.text).join("\n")
+      .replace(/<\/?cite[^>]*>/g, "");
 
     return res.status(200).json({ text });
   } catch (err) {
